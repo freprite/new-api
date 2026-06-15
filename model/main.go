@@ -278,11 +278,15 @@ func migrateDB() error {
 		&SubscriptionOrder{},
 		&UserSubscription{},
 		&SubscriptionPreConsumeRecord{},
+		&AgentHubQuotaAdjustment{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := ensureAgentHubQuotaAdjustmentTableComment(); err != nil {
 		return err
 	}
 	if common.UsingSQLite {
@@ -327,6 +331,7 @@ func migrateDBFast() error {
 		{&SubscriptionOrder{}, "SubscriptionOrder"},
 		{&UserSubscription{}, "UserSubscription"},
 		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
+		{&AgentHubQuotaAdjustment{}, "AgentHubQuotaAdjustment"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
 		{&PerfMetric{}, "PerfMetric"},
@@ -354,6 +359,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := ensureAgentHubQuotaAdjustmentTableComment(); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -365,6 +373,13 @@ func migrateDBFast() error {
 	}
 	common.SysLog("database migrated")
 	return nil
+}
+
+func ensureAgentHubQuotaAdjustmentTableComment() error {
+	if !common.UsingMySQL {
+		return nil
+	}
+	return DB.Exec("ALTER TABLE `agent_hub_quota_adjustments` COMMENT = 'Agent Hub 配额调整幂等记录'").Error
 }
 
 func migrateLOGDB() error {
