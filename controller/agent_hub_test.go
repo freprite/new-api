@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -57,6 +58,7 @@ func setupAgentHubControllerTestDB(t *testing.T) *gorm.DB {
 		&model.User{},
 		&model.Token{},
 		&model.AgentHubQuotaAdjustment{},
+		&model.Log{},
 	); err != nil {
 		t.Fatalf("failed to migrate test db: %v", err)
 	}
@@ -197,6 +199,9 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"reason":     "pre_deduct",
 	}
 	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 
@@ -211,8 +216,12 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 	if adjustment.QuotaBefore != 100 || adjustment.QuotaAfter != 70 || adjustment.Replayed {
 		t.Fatalf("unexpected first adjustment response: %+v", adjustment)
 	}
+	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_subtract", logger.LogQuota(30), 1)
 
 	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -226,6 +235,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 	if !repeated.Replayed || repeated.QuotaAfter != 70 {
 		t.Fatalf("expected repeated adjustment replay with quota 70, got %+v", repeated)
 	}
+	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_subtract", logger.LogQuota(30), 1)
 
 	conflictBody := map[string]any{
 		"request_id": "media-1-pre",
@@ -233,24 +243,56 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"reason":     "pre_deduct",
 	}
 	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", conflictBody, 1)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
 	if response.Success {
 		t.Fatalf("expected conflicting quota adjustment to fail")
 	}
+	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_subtract", logger.LogQuota(30), 1)
 
 	insufficientBody := map[string]any{
 		"request_id": "media-2-pre",
 		"delta":      -1000,
 	}
 	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", insufficientBody, 1)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
 	if response.Success {
 		t.Fatalf("expected insufficient quota adjustment to fail")
 	}
+	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_subtract", logger.LogQuota(30), 1)
+
+	addBody := map[string]any{
+		"request_id": "media-3-refund",
+		"delta":      15,
+		"reason":     "refund",
+	}
+	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", addBody, 1)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
+	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
+	CreateAgentHubQuotaAdjustment(ctx)
+	response = decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected positive quota adjustment to succeed, got message: %s", response.Message)
+	}
+	var added agentHubQuotaAdjustmentResponse
+	if err := common.Unmarshal(response.Data, &added); err != nil {
+		t.Fatalf("failed to decode positive quota adjustment: %v", err)
+	}
+	if added.QuotaBefore != 70 || added.QuotaAfter != 85 || added.Replayed {
+		t.Fatalf("unexpected positive adjustment response: %+v", added)
+	}
+	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_add", logger.LogQuota(15), 2)
 
 	ctx, recorder = newAuthenticatedContext(t, http.MethodGet, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota", nil, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
@@ -263,7 +305,53 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 	if err := common.Unmarshal(response.Data, &quota); err != nil {
 		t.Fatalf("failed to decode quota response: %v", err)
 	}
-	if quota.UserId != user.Id || quota.Quota != 70 || quota.UsedQuota != 7 {
+	if quota.UserId != user.Id || quota.Quota != 85 || quota.UsedQuota != 7 {
 		t.Fatalf("unexpected quota response: %+v", quota)
+	}
+}
+
+func assertAgentHubQuotaAuditLog(t *testing.T, db *gorm.DB, user *model.User, action string, quota string, count int64) {
+	t.Helper()
+
+	var logs []model.Log
+	if err := db.Where("type = ?", model.LogTypeManage).Order("id asc").Find(&logs).Error; err != nil {
+		t.Fatalf("failed to query audit logs: %v", err)
+	}
+	if int64(len(logs)) != count {
+		t.Fatalf("expected %d manage audit logs, got %d", count, len(logs))
+	}
+	if len(logs) == 0 {
+		return
+	}
+
+	log := logs[len(logs)-1]
+	if log.UserId != user.Id || log.Username != user.Username {
+		t.Fatalf("expected audit log to belong to target user %d/%s, got user_id=%d username=%s", user.Id, user.Username, log.UserId, log.Username)
+	}
+
+	other, err := common.StrToMap(log.Other)
+	if err != nil {
+		t.Fatalf("failed to decode log other: %v", err)
+	}
+	op, ok := other["op"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected log other.op, got %+v", other)
+	}
+	if op["action"] != action {
+		t.Fatalf("expected op action %s, got %+v", action, op["action"])
+	}
+	params, ok := op["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected op params, got %+v", op)
+	}
+	if params["quota"] != quota {
+		t.Fatalf("expected quota param %q, got %+v", quota, params["quota"])
+	}
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected admin_info, got %+v", other)
+	}
+	if adminInfo["auth_method"] != "access_token" {
+		t.Fatalf("expected access_token auth method, got %+v", adminInfo["auth_method"])
 	}
 }

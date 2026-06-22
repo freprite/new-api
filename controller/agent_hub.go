@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -60,6 +61,17 @@ func CreateAgentHubQuotaAdjustment(c *gin.Context) {
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if !replayed {
+		action := "user.quota_add"
+		quota := adjustment.Delta
+		if adjustment.Delta < 0 {
+			action = "user.quota_subtract"
+			quota = -adjustment.Delta
+		}
+		recordManageAuditFor(c, adjustment.UserId, action, map[string]interface{}{
+			"quota": logger.LogQuota(quota),
+		})
 	}
 
 	common.ApiSuccess(c, gin.H{
