@@ -326,6 +326,16 @@ func assertAgentHubQuotaAuditLog(t *testing.T, db *gorm.DB, user *model.User, ac
 	if log.UserId != user.Id || log.Username != user.Username {
 		t.Fatalf("expected audit log to belong to target user %d/%s, got user_id=%d username=%s", user.Id, user.Username, log.UserId, log.Username)
 	}
+	if strings.Contains(log.Content, "/api/agent-hub") {
+		t.Fatalf("expected audit log content to describe quota adjustment, got route content: %s", log.Content)
+	}
+	expectedContent := map[string]string{
+		"user.quota_add":      "Increased user quota by " + quota,
+		"user.quota_subtract": "Decreased user quota by " + quota,
+	}[action]
+	if log.Content != expectedContent {
+		t.Fatalf("expected audit log content %q, got %q", expectedContent, log.Content)
+	}
 
 	other, err := common.StrToMap(log.Other)
 	if err != nil {
