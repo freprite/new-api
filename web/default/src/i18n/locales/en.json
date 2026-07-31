@@ -3138,6 +3138,7 @@
     "Operation Type": "Operation Type",
     "Operations": "Operations",
     "Operator Admin": "Operator Admin",
+    "Operator User": "Operator User",
     "Optimize system for self-hosted single-user usage": "Optimize system for self-hosted single-user usage",
     "Optimized network architecture ensures millisecond response times": "Optimized network architecture ensures millisecond response times",
     "Optional callback override. Leave blank to use server address": "Optional callback override. Leave blank to use server address",

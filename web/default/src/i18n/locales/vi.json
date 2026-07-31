@@ -3138,6 +3138,7 @@
     "Operation Type": "Loại thao tác",
     "Operations": "Vận hành",
     "Operator Admin": "Quản trị viên vận hành",
+    "Operator User": "Người dùng thao tác",
     "Optimize system for self-hosted single-user usage": "Tối ưu hóa hệ thống cho việc sử dụng đơn người dùng tự lưu trữ",
     "Optimized network architecture ensures millisecond response times": "Kiến trúc mạng tối ưu đảm bảo thời gian phản hồi mili giây",
     "Optional callback override. Leave blank to use server address": "Tùy chọn ghi đè callback. Để trống để sử dụng địa chỉ máy chủ",

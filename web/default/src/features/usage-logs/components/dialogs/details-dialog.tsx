@@ -524,6 +524,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
     if (hasUsername) return String(username)
     return `ID: ${id}`
   })()
+  const isAgentHubQuotaAdjustment =
+    isManage &&
+    (other?.op?.action === 'user.quota_add' ||
+      other?.op?.action === 'user.quota_subtract') &&
+    adminInfo?.caller_admin_id != null
+  const manageOperatorLabel = isAgentHubQuotaAdjustment
+    ? t('Operator User')
+    : t('Operator Admin')
   const authMethodLabel = (() => {
     if (!isManage || !props.isAdmin || !adminInfo?.auth_method) return ''
     if (adminInfo.auth_method === 'access_token') return t('Access Token')
@@ -883,7 +891,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   className='text-muted-foreground size-3.5'
                   aria-hidden='true'
                 />
-                {t('Operator Admin')}
+                {manageOperatorLabel}
               </span>
             }
             value={manageOperator}

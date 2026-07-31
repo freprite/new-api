@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -92,6 +93,16 @@ func seedAgentHubUser(t *testing.T, db *gorm.DB, username string, quota int, use
 	return user
 }
 
+func newAgentHubAuthenticatedContext(t *testing.T, method string, target string, body any, userID int) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+
+	ctx, recorder := newAuthenticatedContext(t, method, target, body, userID)
+	ctx.Set("username", "root")
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Set("use_access_token", true)
+	return ctx, recorder
+}
+
 func TestAgentHubUserProvisionCreatesAndReusesToken(t *testing.T) {
 	db := setupAgentHubControllerTestDB(t)
 	body := map[string]any{
@@ -102,7 +113,7 @@ func TestAgentHubUserProvisionCreatesAndReusesToken(t *testing.T) {
 		"group":         "default",
 	}
 
-	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
+	ctx, recorder := newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
 	CreateAgentHubUserProvision(ctx)
 
 	response := decodeAPIResponse(t, recorder)
@@ -131,7 +142,7 @@ func TestAgentHubUserProvisionCreatesAndReusesToken(t *testing.T) {
 		t.Fatalf("expected one token, got %d", tokenCount)
 	}
 
-	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
 	CreateAgentHubUserProvision(ctx)
 	response = decodeAPIResponse(t, recorder)
 	if !response.Success {
@@ -161,7 +172,7 @@ func TestAgentHubUserProvisionReusesExistingUserAndCreatesToken(t *testing.T) {
 		"password":      "pass12345",
 		"initial_quota": 123,
 	}
-	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
+	ctx, recorder := newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/user-provisions", body, 1)
 	CreateAgentHubUserProvision(ctx)
 
 	response := decodeAPIResponse(t, recorder)
@@ -196,10 +207,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"delta":      -30,
 		"reason":     "pre_deduct",
 	}
-	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
-	ctx.Set("username", "root")
-	ctx.Set("role", common.RoleRootUser)
-	ctx.Set("use_access_token", true)
+	ctx, recorder := newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 
@@ -216,10 +224,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 	}
 	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_subtract", logger.LogQuota(30), 1)
 
-	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
-	ctx.Set("username", "root")
-	ctx.Set("role", common.RoleRootUser)
-	ctx.Set("use_access_token", true)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", body, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -240,10 +245,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"delta":      -20,
 		"reason":     "pre_deduct",
 	}
-	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", conflictBody, 1)
-	ctx.Set("username", "root")
-	ctx.Set("role", common.RoleRootUser)
-	ctx.Set("use_access_token", true)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", conflictBody, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -256,10 +258,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"request_id": "media-2-pre",
 		"delta":      -1000,
 	}
-	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", insufficientBody, 1)
-	ctx.Set("username", "root")
-	ctx.Set("role", common.RoleRootUser)
-	ctx.Set("use_access_token", true)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", insufficientBody, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -273,10 +272,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 		"delta":      15,
 		"reason":     "refund",
 	}
-	ctx, recorder = newAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", addBody, 1)
-	ctx.Set("username", "root")
-	ctx.Set("role", common.RoleRootUser)
-	ctx.Set("use_access_token", true)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodPost, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota-adjustments", addBody, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	CreateAgentHubQuotaAdjustment(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -292,7 +288,7 @@ func TestAgentHubQuotaAdjustmentIdempotencyAndQuery(t *testing.T) {
 	}
 	assertAgentHubQuotaAuditLog(t, db, user, "user.quota_add", logger.LogQuota(15), 2)
 
-	ctx, recorder = newAuthenticatedContext(t, http.MethodGet, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota", nil, 1)
+	ctx, recorder = newAgentHubAuthenticatedContext(t, http.MethodGet, "/api/agent-hub/users/"+strconv.Itoa(user.Id)+"/quota", nil, 1)
 	ctx.Params = gin.Params{{Key: "user_id", Value: strconv.Itoa(user.Id)}}
 	GetAgentHubUserQuota(ctx)
 	response = decodeAPIResponse(t, recorder)
@@ -361,5 +357,11 @@ func assertAgentHubQuotaAuditLog(t *testing.T, db *gorm.DB, user *model.User, ac
 	}
 	if adminInfo["auth_method"] != "access_token" {
 		t.Fatalf("expected access_token auth method, got %+v", adminInfo["auth_method"])
+	}
+	if fmt.Sprintf("%v", adminInfo["admin_id"]) != strconv.Itoa(user.Id) || adminInfo["admin_username"] != user.Username {
+		t.Fatalf("expected audit operator to be target user %d/%s, got %+v", user.Id, user.Username, adminInfo)
+	}
+	if fmt.Sprintf("%v", adminInfo["caller_admin_id"]) != "1" || adminInfo["caller_admin_username"] != "root" {
+		t.Fatalf("expected root access token caller to be retained, got %+v", adminInfo)
 	}
 }

@@ -69,9 +69,27 @@ func CreateAgentHubQuotaAdjustment(c *gin.Context) {
 			action = "user.quota_subtract"
 			quota = -adjustment.Delta
 		}
-		recordManageAuditFor(c, adjustment.UserId, action, map[string]interface{}{
+		params := map[string]interface{}{
 			"quota": logger.LogQuota(quota),
-		})
+		}
+		targetUsername, _ := model.GetUsernameById(adjustment.UserId, false)
+		callerInfo := auditOperatorInfo(c)
+		adminInfo := map[string]interface{}{
+			"admin_id":       adjustment.UserId,
+			"admin_username": targetUsername,
+			"auth_method":    auditAuthMethod(c),
+		}
+		if callerInfo["admin_id"] != nil {
+			adminInfo["caller_admin_id"] = callerInfo["admin_id"]
+		}
+		if callerInfo["admin_username"] != nil {
+			adminInfo["caller_admin_username"] = callerInfo["admin_username"]
+		}
+		if callerInfo["admin_role"] != nil {
+			adminInfo["caller_admin_role"] = callerInfo["admin_role"]
+		}
+		model.RecordOperationAuditLog(adjustment.UserId, auditContentEN(action, params), c.ClientIP(), action, params, adminInfo, nil)
+		markAuditLogged(c)
 	}
 
 	common.ApiSuccess(c, gin.H{

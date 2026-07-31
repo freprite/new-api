@@ -3138,6 +3138,7 @@
     "Operation Type": "操作タイプ",
     "Operations": "運用",
     "Operator Admin": "オペレーター管理",
+    "Operator User": "操作ユーザー",
     "Optimize system for self-hosted single-user usage": "セルフホスト型の単一ユーザー使用向けにシステムを最適化する",
     "Optimized network architecture ensures millisecond response times": "最適化されたネットワークアーキテクチャによりミリ秒単位の応答時間を保証",
     "Optional callback override. Leave blank to use server address": "オプションのコールバック上書き。サーバーアドレスを使用するには空欄のままにします",

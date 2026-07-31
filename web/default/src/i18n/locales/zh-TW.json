@@ -3138,6 +3138,7 @@
     "Operation Type": "操作類型",
     "Operations": "運維",
     "Operator Admin": "操作管理員",
+    "Operator User": "操作使用者",
     "Optimize system for self-hosted single-user usage": "優化系統以適應自託管單用戶使用",
     "Optimized network architecture ensures millisecond response times": "優化的網絡架構，確保毫秒級回應時間",
     "Optional callback override. Leave blank to use server address": "可選的Callback覆蓋。留空以使用伺服器地址",
